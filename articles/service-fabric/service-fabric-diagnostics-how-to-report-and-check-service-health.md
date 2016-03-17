@@ -21,6 +21,7 @@
 When your services encounter problems, your ability to respond and fix any resulting incidents and outages depends on being able to detect the issues quickly. By reporting problems and failures to the Service Fabric health manager from your service code, you can use standard health monitoring tools that Service Fabric provides to check the health status.
 
 There are two ways you can report health from the service.
+
     1. Using Partition or CodePackageActivationContext objects.
     2. Using FabricClient
 
