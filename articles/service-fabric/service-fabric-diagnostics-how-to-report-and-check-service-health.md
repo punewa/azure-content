@@ -14,18 +14,29 @@
    ms.tgt_pltfrm="NA"
    ms.workload="NA"
    ms.date="02/12/2016"
-   ms.author="toddabel"/>
+   ms.author="toddabel;punewa"/>
 
 
 # Report and check service health
 When your services encounter problems, your ability to respond and fix any resulting incidents and outages depends on being able to detect the issues quickly. By reporting problems and failures to the Service Fabric health manager from your service code, you can use standard health monitoring tools that Service Fabric provides to check the health status.
 
-This article walks you through an example of adding a health report to a service, and shows how the health status can be checked using the tools that Service Fabric provides. This article is intended to be a quick introduction to the health monitoring capabilities in Service Fabric. For more detailed information, you can read the series of in-depth articles on health starting with the link at the end of this document.
+There are two ways you can report health from the service.
+    1. Using Partition or CodePackageActivationContext objects.
+    2. Using FabricClient
+
+You can use FabricClient to report health only if the cluster is not [secure](service-fabric-cluster-security.md) or if the service is running with admin privileges. This won't be true in most real world scenarios.
+
+This article walks you through an example of reporting health from the service code, and shows how the health status can be checked using the tools that Service Fabric provides. This article is intended to be a quick introduction to the health monitoring capabilities in Service Fabric. For more detailed information, you can read the series of in-depth articles on health starting with the link at the end of this document.
 
 ## Prerequisites
 You must have the following installed:
    * Visual Studio 2015
    * Service Fabric SDK
+
+## To create a local secure dev cluster
+Start PowerShell with admin privilages and run the following commands.
+
+![Create a secure dev cluster](./media/service-fabric-diagnostics-how-to-report-and-check-service-health/create-secure-dev-cluster.png)
 
 ## To deploy an application and check its health
 To deploy an application and check its health, follow these steps:
@@ -53,20 +64,10 @@ To deploy an application and check its health, follow these steps:
 The Service Fabric Visual Studio project templates contain sample code. The steps below show how you can report custom health events from your service code. Such reports will automatically show up in the standards tools for health monitoring that Service Fabric provides, such as Service Fabric Explorer, Azure portal health view, and PowerShell.
 
 1. Reopen the application you created above in Visual Studio or create a new application by using a stateful service from the Visual Studio templates.
-2. Open the **Stateful1.cs** file. Find the declaration for `var myDictionary` and add the code below right after the `var myDictionary` declaration. The `fabricClient` object created here will be used later to report health.
 
-    ```csharp
-    var fabricClient = new FabricClient(new FabricClientSettings() { HealthReportSendInterval = TimeSpan.FromSeconds(0) });
-    ```
+2. Next, opne the **Stateful1.cs** file and look up the call `myDictionary.TryGetValueAsync` in the *RunAsync* method. You can see this returns a `result` that holds the current value of the counter, since the key logic in this application is to keep a count running. If this was a real application, and if the lack of result represented a failure, then you would want to report that to the health manager.
 
-    Also add this namespace to the **Stateful1.cs** file.
-
-    ```csharp
-    using System.Fabric;
-    ```
-
-4. Next, look up the call `myDictionary.TryGetValueAsync` in the *RunAsync* method. You can see this returns a `result` that holds the current value of the counter, since the key logic in this application is to keep a count running. If this was a real application, and if the lack of result represented a failure, then you would want to report that to the health manager.
-5. To report a health event for the lack of result representing a failure, add the code below after the `myDictionary.TryGetValueAsync` call. We report the event as a `StatefulServiceReplicaHealthReport` since it's being reported from a stateful service. The PartitionId and ReplicaId that are passed in to the report event will help identify the source of this report when you see it in one of the health monitoring tools.  That's important because a deployed stateful service can have multiple partitions and each partition can have multiple replicas. The `HealthInformation` parameter stores information about the health issue being reported. Add this namespace to the **Stateful1.cs** file.
+3. To report a health event for the lack of result representing a failure, add the code below after the `myDictionary.TryGetValueAsync` call. We report replica health since it's being reported from a stateful service. The `HealthInformation` parameter stores information about the health issue being reported. Add this namespace to the **Stateful1.cs** file.
 
     ```csharp
     using System.Fabric.Health;
@@ -75,14 +76,20 @@ The Service Fabric Visual Studio project templates contain sample code. The step
     Add this code after the `myDictionary.TryGetValueAsync` call.
 
     ```csharp
-    if(!result.HasValue)
+    if (!result.HasValue)
     {
-        var replicaHealthReport = new StatefulServiceReplicaHealthReport(
-            this.ServiceInitializationParameters.PartitionId,
-            this.ServiceInitializationParameters.ReplicaId,
-            new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error));
+        HealthInformation healthInformation = new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error);
+        this.Partition.ReportReplicaHealth(healthInformation);
+    }
+    ```
 
-        fabricClient.HealthManager.ReportHealth(replicaHealthReport);
+    For a stateless service use the following code.
+
+    ```csharp
+    if (!result.HasValue)
+    {
+        HealthInformation healthInformation = new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error);
+        this.Partition.ReportInstanceHealth(healthInformation);
     }
     ```
 
@@ -91,24 +98,33 @@ The Service Fabric Visual Studio project templates contain sample code. The step
     ```csharp
     //if(!result.HasValue)
     {
-        var replicaHealthReport = new StatefulServiceReplicaHealthReport(
-            this.ServiceInitializationParameters.PartitionId,
-            this.ServiceInitializationParameters.ReplicaId,
-            new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error));
-
-        var fabricClient = new FabricClient(new FabricClientSettings() { HealthReportSendInterval = TimeSpan.FromSeconds(0) });
-        fabricClient.HealthManager.ReportHealth(replicaHealthReport);
+        HealthInformation healthInformation = new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error);
+        this.Partition.ReportReplicaHealth(healthInformation);
     }
     ```
 
 6. Once the application is running, open Service Fabric Explorer to check health of the application. This time Service Fabric Explorer will show the application to be unhealthy. This is because of the error that was reported from the code that we added above.
+
 ![Unhealthy application in Service Fabric Explorer](./media/service-fabric-diagnostics-how-to-report-and-check-service-health/sfx-unhealthy-app.png)
 
 7. If you select the primary replica in the tree view of Service Fabric Explorer, you will see that it shows the health to be in error too. It also displays the health report details that were added to the `HealthInformation` parameter in the code. You can see the same health reports in PowerShell also as well as the Azure portal.
 ![Replica health in Service Fabric Explorer](./media/service-fabric-diagnostics-how-to-report-and-check-service-health/replica-health-error-report-sfx.png)
 
 This report will remain in the health manager until it is replaced by another report or this replica is deleted. Since we did not set a TimeToLive for this health report in the HealthInformation object, it will never expire.
-For health to be queried and reported, the FabricClient needs to be in a process with admin privileges.
+
+Its recommended that health should be reported on the most granular level, which in above case is the replica. You can also report health on a `Partition`.
+
+```csharp
+HealthInformation healthInformation = new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error);
+this.Partition.ReportPartitionHealth(healthInformation);
+```
+For reporting health on `Application`, `DeployedApplication` and `DeployedServicePackage` use the `CodePackageActivationContext`
+
+```csharp
+HealthInformation healthInformation = new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error);
+var activationContext = FabricRuntime.GetActivationContext();
+activationContext.ReportApplicationHealth(healthInformation);
+```
 
 ## Next steps
 [Deep dive on Service Fabric health](service-fabric-health-introduction.md)
