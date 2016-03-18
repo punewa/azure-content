@@ -14,7 +14,7 @@
    ms.tgt_pltfrm="NA"
    ms.workload="NA"
    ms.date="02/12/2016"
-   ms.author="toddabel;punewa"/>
+   ms.author="toddabel"/>
 
 
 # Report and check service health
@@ -25,7 +25,7 @@ There are two ways you can report health from the service.
     1. Using Partition or CodePackageActivationContext objects.
     2. Using FabricClient
 
-You can use FabricClient to report health only if the cluster is not [secure](service-fabric-cluster-security.md) or if the service is running with admin privileges. This won't be true in most real world scenarios.
+You can use FabricClient to report health only if the cluster is not [secure](service-fabric-cluster-security.md) or if the service is running with admin privileges. This won't be true in most real world scenarios. Using Partition and CodePackageActivationContext objects you can report health on local objects, not other applications. With FabricClient you can report health on any other entity (though you shouldn't).
 
 This article walks you through an example of reporting health from the service code, and shows how the health status can be checked using the tools that Service Fabric provides. This article is intended to be a quick introduction to the health monitoring capabilities in Service Fabric. For more detailed information, you can read the series of in-depth articles on health starting with the link at the end of this document.
 
@@ -35,7 +35,7 @@ You must have the following installed:
    * Service Fabric SDK
 
 ## To create a local secure dev cluster
-Start PowerShell with admin privilages and run the following commands.
+Start PowerShell with admin privileges and run the following commands.
 
 ![Create a secure dev cluster](./media/service-fabric-diagnostics-how-to-report-and-check-service-health/create-secure-dev-cluster.png)
 
@@ -66,7 +66,7 @@ The Service Fabric Visual Studio project templates contain sample code. The step
 
 1. Reopen the application you created above in Visual Studio or create a new application by using a stateful service from the Visual Studio templates.
 
-2. Next, opne the **Stateful1.cs** file and look up the call `myDictionary.TryGetValueAsync` in the *RunAsync* method. You can see this returns a `result` that holds the current value of the counter, since the key logic in this application is to keep a count running. If this was a real application, and if the lack of result represented a failure, then you would want to report that to the health manager.
+2. Next, open the **Stateful1.cs** file and look up the call `myDictionary.TryGetValueAsync` in the *RunAsync* method. You can see this returns a `result` that holds the current value of the counter, since the key logic in this application is to keep a count running. If this was a real application, and if the lack of result represented a failure, then you would want to report that to the health manager.
 
 3. To report a health event for the lack of result representing a failure, add the code below after the `myDictionary.TryGetValueAsync` call. We report replica health since it's being reported from a stateful service. The `HealthInformation` parameter stores information about the health issue being reported. Add this namespace to the **Stateful1.cs** file.
 
@@ -94,6 +94,20 @@ The Service Fabric Visual Studio project templates contain sample code. The step
     }
     ```
 
+   If your service is running with admin privileges or if the cluster is not [secure](service-fabric-cluster-security.md), you can also use FabricClient to report health as shown below.
+
+   ```csharp
+   if (!result.HasValue)
+   {
+       var replicaHealthReport = new StatefulServiceReplicaHealthReport(
+            this.ServiceInitializationParameters.PartitionId,
+            this.ServiceInitializationParameters.ReplicaId,
+            new HealthInformation("ServiceCode", "StateDictionary", HealthState.Error));
+
+        var fabricClient = new FabricClient(new FabricClientSettings() { HealthReportSendInterval = TimeSpan.FromSeconds(0) });
+        fabricClient.HealthManager.ReportHealth(replicaHealthReport);
+   }
+   ```
 5. Let's simulate this failure and see it show up in the health monitoring tools. To simulate the failure, comment out the first line in the health reporting code you added above. After you comment out the first line, the code will look as shown below. This will now fire this health report each time RunAsync executes. After making the change run the application using **F5**.
 
     ```csharp
