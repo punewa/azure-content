@@ -22,10 +22,11 @@ When your services encounter problems, your ability to respond and fix any resul
 
 There are two ways you can report health from the service.
 
-    1. Using Partition or CodePackageActivationContext objects.
-    2. Using FabricClient
+1. Using [Partition](https://msdn.microsoft.com/en-us/library/system.fabric.istatefulservicepartition.aspx) or [CodePackageActivationContext](https://msdn.microsoft.com/en-us/library/system.fabric.codepackageactivationcontext.aspx) objects.  
+Using `Partition` and `CodePackageActivationContext` objects you can report health on elements that are part of the current context. For example, the code running as part of a replica can report health only on that replica, the partition it belongs to and the application it is a part of.
 
-You can use FabricClient to report health only if the cluster is not [secure](service-fabric-cluster-security.md) or if the service is running with admin privileges. This won't be true in most real world scenarios. Using Partition and CodePackageActivationContext objects you can report health on local objects, not other applications. With FabricClient you can report health on any other entity (though you shouldn't).
+2. Using `FabricClient`   
+You can use `FabricClient` to report health only if the cluster is not [secure](service-fabric-cluster-security.md) or if the service is running with admin privileges. This won't be true in most real world scenarios. With FabricClient you can report health on any entity that is a part of the cluster. But ideally service code should only send reports related to its own health.
 
 This article walks you through an example of reporting health from the service code, and shows how the health status can be checked using the tools that Service Fabric provides. This article is intended to be a quick introduction to the health monitoring capabilities in Service Fabric. For more detailed information, you can read the series of in-depth articles on health starting with the link at the end of this document.
 
@@ -66,7 +67,7 @@ The Service Fabric Visual Studio project templates contain sample code. The step
 
 1. Reopen the application you created above in Visual Studio or create a new application by using a stateful service from the Visual Studio templates.
 
-2. Next, open the **Stateful1.cs** file and look up the call `myDictionary.TryGetValueAsync` in the *RunAsync* method. You can see this returns a `result` that holds the current value of the counter, since the key logic in this application is to keep a count running. If this was a real application, and if the lack of result represented a failure, then you would want to report that to the health manager.
+2. Next, open the **Stateful1.cs** file and look up the call `myDictionary.TryGetValueAsync` in the *RunAsync* method. You can see this returns a `result` that holds the current value of the counter, since the key logic in this application is to keep a count running. If this was a real application, and if the lack of result represented a failure, then you would want to flag that through health.
 
 3. To report a health event for the lack of result representing a failure, add the code below after the `myDictionary.TryGetValueAsync` call. We report replica health since it's being reported from a stateful service. The `HealthInformation` parameter stores information about the health issue being reported. Add this namespace to the **Stateful1.cs** file.
 
